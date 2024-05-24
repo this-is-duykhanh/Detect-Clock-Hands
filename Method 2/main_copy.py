@@ -3,23 +3,23 @@ import numpy as np
 import math
 
 
+# The resize_input function has the function of changing the size while maintaining the aspect ratio, with the longest side being 1000 pixels
 def resize_input(img):
-    """
-    The resize_input function has the function of changing the size while maintaining the aspect ratio, with the longest side being 1000 pixels
-    """
     height, width, _ = img.shape
+    # Determine the scaling factor to make the longer side 1000 pixels
     scale_factor = 1000 / max(height, width)
+    # Resize the image while preserving the aspect ratio
     img = cv2.resize(img, (int(width * scale_factor), int(height * scale_factor)))
     return img
 
 
+# The clock_detection function has the function of detecting the clock from the image
 def clock_detection(img, blurred):
-    """
-    The clock_detection function has the function of detecting the clock from the image
-    """
+    # Initialize variables to store the radius and center of the clock
     radius = 0
     center_x, center_y = 0, 0
 
+    # Use the Hough method to find circles in the image
     circles = cv2.HoughCircles(
         blurred,
         cv2.HOUGH_GRADIENT,
@@ -46,36 +46,42 @@ def clock_detection(img, blurred):
         center_y = int(y)
         radius = int(r)
 
+    # If no circle is found
     else:
+        # Use the boundary finding method to find objects in the image
         contours, _ = cv2.findContours(
             blurred, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
+        # Initialize variables to store the area and largest rectangle
         max_area = 0
         max_rect = None
 
         for contour in contours:
+            # Calculate the area of the contour
             area = cv2.contourArea(contour)
 
+            # If the area is larger than the current area then update area and largest rectangle
             if area > max_area:
                 max_area = area
                 max_rect = contour
 
         if max_rect is not None:
+            # Get the coordinates and size of the rectangle
             (x, y, w, h) = cv2.boundingRect(max_rect)
 
+            # Calculate the coordinates of the center of the rectangle
             center_x = x + w // 2
             center_y = y + h // 2
 
+            # Calculate the radius of the circle inscribed in the rectangle
             radius = min(w, h) // 2
 
     cv2.circle(img, (center_x, center_y), 20, (255, 255, 0), -1)
     return center_x, center_y, radius
 
 
+# The line_detection function has the function of detecting straight lines in an image
 def line_detection(img, blurred):
-    """
-    The line_detection function has the function of detecting straight lines in an image
-    """
     edges = cv2.Canny(blurred, 50, 150)
 
     lines = cv2.HoughLinesP(
@@ -88,106 +94,132 @@ def distance_to_center(x1, center_x, y1, center_y):
     return np.sqrt((x1 - center_x) ** 2 + (y1 - center_y) ** 2)
 
 
+# The group_lines_detection function has the function of finding lines that are close together and nearly parallel to group into a group
 def group_lines_detection(lines, center_x, center_y, radius):
-    """
-    The group_lines_detection function has the function of finding lines that are close together and nearly parallel to group into a group
-    """
     groups = []
     for line in lines:
         x1, y1, x2, y2 = line[0]
 
+        # Calculate the length from the two ends of the line to the center of the clock
         length1 = distance_to_center(x1, center_x, y1, center_y)
         length2 = distance_to_center(x2, center_x, y2, center_y)
+        # max_length furthest point from the center of the clock
+        # min_length closest point to the center of the clock
         max_length = np.max([length1, length2])
         min_length = np.min([length1, length2])
 
+        # The farthest point must be within the radius of the clock and the nearest point must only be within 50% of the radius of the clock
         if (max_length < radius) and (min_length < radius * 50 / 100):
+            # Calculate the angle of the line in degrees
             angle = math.atan2(y2 - y1, x2 - x1)
             angle = math.degrees(angle)
 
+            # Initialize flag variable to check whether the line belongs to any group or not
             grouped = False
 
             for group in groups:
+                # Get the average angle of the group
                 mean_angle = group["mean_angle"]
 
+                # If the angle of the line and the average angle of the group differ by less than 12 degrees or are equal when plus or minus 180 degrees
+                # (this means the line is parallel or in the same direction as the group)
                 if (
                     abs(angle - mean_angle) < 12
                     or abs(angle - mean_angle - 180) < 12
                     or abs(angle - mean_angle + 180) < 12
                 ):
+                    # Add lines to the group
                     group["lines"].append(line)
 
+                    # Set the flag variable to True to signal that the group has been found
                     grouped = True
                     break
 
+            # If you cannot find a suitable group
             if not grouped:
+                # Create a new group with its lines and angles
                 groups.append({"lines": [line], "mean_angle": angle})
     return groups
 
 
+# The function distance between parallel lines has the function to calculate the distance between two parallel lines
 def distance_between_parallel_lines(line1, line2):
-    """
-    The function distance between parallel lines has the function to calculate the distance between two parallel lines
-    """
+    # Get the coordinates of two points on each line
     x1_1, y1_1, x2_1, y2_1 = line1[0]
     x1_2, y1_2, x2_2, y2_2 = line2[0]
 
+    # Create two direction vectors of two straight lines
     vector1 = np.array([x2_1 - x1_1, y2_1 - y1_1])
 
+    # Creates a vector connecting a point on one line to a point on the other line
     vector_between_lines = np.array([x1_2 - x1_1, y1_2 - y1_1])
 
+    # Calculates the perpendicular distance between the two lines.
     distance = np.abs(np.cross(vector1, vector_between_lines)) / np.linalg.norm(vector1)
 
     return distance
 
 
+# The hands detection function has the function of finding the farthest endpoint from the clock center of a line segment among line segments
+# in the same group to create a clock hand with the clock center point.
 def hands_detection(groups, center_x, center_y):
-    """
-    The hands detection function has the function of finding the farthest endpoint from the clock center of a line segment among line segments in the same group to create a clock hand with the clock center point.
-    """
+    # Initialize a list to store clock hands
     hands = []
 
+    # Browse through groups of lines
     for group in groups:
+        # Get the list of lines in the group and number of lines
         lines = group["lines"]
         num_lines = len(lines)
 
+        # Initialize variables to store the maximum thickness and length of the lines
         max_thickness = 0
         max_length = 0
 
+        # Browse lines in groups
         for i in range(num_lines):
             x1, y1, x2, y2 = lines[i][0]
 
+            # Calculate the distance from two points to the center of the clock
             length1 = distance_to_center(x1, center_x, y1, center_y)
             length2 = distance_to_center(x2, center_x, y2, center_y)
 
+            # Take the larger distance as the length of the line
             length = np.max([length1, length2])
 
+            # If the length is greater than the current maximum length
             if length > max_length:
                 max_length = length
 
+                # Take the point farthest from the center as the end point of the clock hand
                 if length == length1:
                     max_line = x1, y1, center_x, center_y
                 else:
                     max_line = x2, y2, center_x, center_y
 
+            # Browse through the remaining lines in the group
             for j in range(i + 1, num_lines):
+                # Calculate the distance between two lines using a distance_between_parallel_lines function
                 thickness = distance_between_parallel_lines(lines[i], lines[j])
 
+                # Update maximum thickness
                 if thickness > max_thickness:
                     max_thickness = thickness
 
+        # Create a set of line, thickness and length
         line = max_line, max_thickness, max_length
 
+        # If the thickness is greater than 0, it means there are at least two parallel lines
         if max_thickness > 0:
+            # Add this set to the clock hands list
             hands.append(line)
 
+    # Sort the list of clock hands by length in descending order
     hands.sort(key=lambda x: x[2], reverse=True)
 
+    # Take the first three clock hands as the clock hands
     hands = hands[:3]
     return hands
-
-
-"""--------------------------------------------------------------------------------------------------------------------"""
 
 
 # The get_hands function has the function of accurately determining the hour, minute, and second hands
