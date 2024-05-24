@@ -5,17 +5,17 @@ import math
 
 def resize_input(img):
     """
-    The resize_input function has the function of changing the size while maintaining the aspect ratio, with the longest side being 1000 pixels
+    The purpose of the resize_input function is to alter the size while preserving the aspect ratio; its longest side is 1000 pixels.
     """
     height, width, _ = img.shape
-    scale_factor = 1000 / max(height, width)
-    img = cv2.resize(img, (int(width * scale_factor), int(height * scale_factor)))
+    scale = 1000 / max(height, width)
+    img = cv2.resize(img, (int(width * scale), int(height * scale)))
     return img
 
 
 def clock_detection(img, blurred):
     """
-    The clock_detection function has the function of detecting the clock from the image
+    The purpose of the clock_detection function is to extract the clock from the image.
     """
     radius = 0
     center_x, center_y = 0, 0
@@ -37,8 +37,10 @@ def clock_detection(img, blurred):
         for circle in circles[0, :]:
             x, y, r = circle
 
-            if r > radius:
-                max_circle = circle
+            if r < radius:
+                continue
+
+            max_circle = circle
 
         x, y, r = max_circle
 
@@ -56,25 +58,29 @@ def clock_detection(img, blurred):
         for contour in contours:
             area = cv2.contourArea(contour)
 
-            if area > max_area:
-                max_area = area
-                max_rect = contour
+            if area < max_area:
+                continue
 
-        if max_rect is not None:
-            (x, y, w, h) = cv2.boundingRect(max_rect)
+            max_area = area
+            max_rect = contour
 
-            center_x = x + w // 2
-            center_y = y + h // 2
+        if max_rect is None:
+            return None
 
-            radius = min(w, h) // 2
+        x, y, w, h = cv2.boundingRect(max_rect)
 
-    cv2.circle(img, (center_x, center_y), 20, (255, 255, 0), -1)
+        center_x = x + w // 2
+        center_y = y + h // 2
+
+        radius = min(w, h) // 2
+
+    cv2.circle(img, (center_x, center_y), 20, (255, 0, 255), -1)
     return center_x, center_y, radius
 
 
-def line_detection(img, blurred):
+def line_detection(blurred):
     """
-    The line_detection function has the function of detecting straight lines in an image
+    The purpose of the line_detection function is to identify straight lines in an image.
     """
     edges = cv2.Canny(blurred, 50, 150)
 
@@ -85,12 +91,15 @@ def line_detection(img, blurred):
 
 
 def distance_to_center(x1, center_x, y1, center_y):
+    """
+    The distance_to_center function has the function of calculating the distance between a point and the center of the clock
+    """
     return np.sqrt((x1 - center_x) ** 2 + (y1 - center_y) ** 2)
 
 
-def group_lines_detection(lines, center_x, center_y, radius):
+def clock_hand_line(lines, center_x, center_y, radius):
     """
-    The group_lines_detection function has the function of finding lines that are close together and nearly parallel to group into a group
+    Finding lines that are roughly parallel and close together is the purpose of the clock_hand_line  function, which groups lines into groups.
     """
     groups = []
     for line in lines:
@@ -101,14 +110,14 @@ def group_lines_detection(lines, center_x, center_y, radius):
         max_length = np.max([length1, length2])
         min_length = np.min([length1, length2])
 
-        if (max_length < radius) and (min_length < radius * 50 / 100):
+        if (max_length < radius) and (min_length < radius * 1 / 2):
             angle = math.atan2(y2 - y1, x2 - x1)
             angle = math.degrees(angle)
 
             grouped = False
 
             for group in groups:
-                mean_angle = group["mean_angle"]
+                mean_angle = group["angle"]
 
                 if (
                     abs(angle - mean_angle) < 12
@@ -121,13 +130,13 @@ def group_lines_detection(lines, center_x, center_y, radius):
                     break
 
             if not grouped:
-                groups.append({"lines": [line], "mean_angle": angle})
+                groups.append({"lines": [line], "angle": angle})
     return groups
 
 
-def distance_between_parallel_lines(line1, line2):
+def hand_thickness(line1, line2):
     """
-    The function distance between parallel lines has the function to calculate the distance between two parallel lines
+    The function to determine the distance between two parallel lines is part of the function hand thickness.
     """
     x1_1, y1_1, x2_1, y2_1 = line1[0]
     x1_2, y1_2, x2_2, y2_2 = line2[0]
@@ -143,7 +152,7 @@ def distance_between_parallel_lines(line1, line2):
 
 def hands_detection(groups, center_x, center_y):
     """
-    The hands detection function has the function of finding the farthest endpoint from the clock center of a line segment among line segments in the same group to create a clock hand with the clock center point.
+    In order to produce a clock hand with the clock center point, the hands detection function finds the line segment's farthest endpoint from the clock center among line segments in the same group.
     """
     hands = []
 
@@ -171,7 +180,7 @@ def hands_detection(groups, center_x, center_y):
                     max_line = x2, y2, center_x, center_y
 
             for j in range(i + 1, num_lines):
-                thickness = distance_between_parallel_lines(lines[i], lines[j])
+                thickness = hand_thickness(lines[i], lines[j])
 
                 if thickness > max_thickness:
                     max_thickness = thickness
@@ -187,9 +196,9 @@ def hands_detection(groups, center_x, center_y):
     return hands
 
 
-def get_hands(hands):
+def clock_hand_classification(hands):
     """
-    The get_hands function has the function of accurately determining the hour, minute, and second hands from the 3 clock hands found in the hands_detection function.
+    The three clock hands detected via the hands_detection function can be used to precisely determine the hour, minute, and second hands using the clock_hand_classification function.
     """
     sorted_hands_by_thickness = sorted(hands, key=lambda hands: hands[1])
 
@@ -205,9 +214,9 @@ def get_hands(hands):
     return hour_hand, minute_hand, second_hand
 
 
-def draw_hands_frame(img, hour_hand, minute_hand, second_hand, center_x, center_y):
+def draw_hands(img, hour_hand, minute_hand, second_hand, center_x, center_y):
     """
-    The draw_hands_frame function
+    The draw_hands function has the function of drawing the clock hands on the image.
     """
     x1, y1, _, _ = hour_hand[0]
     cv2.line(img, (center_x, center_y), (x1, y1), (255, 0, 0), 15)
@@ -221,7 +230,7 @@ def draw_hands_frame(img, hour_hand, minute_hand, second_hand, center_x, center_
 
 def get_vector(hand):
     """
-    Function to calculate direction vector of a clock hand
+    Function to determine a clock hand's direction vector
     """
     x1, y1, x2, y2 = hand[0]
     vector = [x2 - x1, y2 - y1]
@@ -230,21 +239,21 @@ def get_vector(hand):
 
 def dot_product(u, v):
     """
-    Function to calculate the dot product of two vectors
+    Function for figuring out two vectors' dot product
     """
     return u[0] * v[0] + u[1] * v[1]
 
 
 def cross_product(u, v):
     """
-    The function calculates the directional product of two vectors
+    The directed product of two vectors is computed by the function.
     """
     return u[0] * v[1] - u[1] * v[0]
 
 
 def get_angle(hand, center_x, center_y):
     """
-    Function to calculate the angle of a clock hand relative to the y direction
+    Function to determine a clock hand's angle with respect to the y direction
     """
     u = get_vector(hand=hand)
 
@@ -272,7 +281,7 @@ def get_angle(hand, center_x, center_y):
 
 def get_time(hour_angle, minute_angle, second_angle):
     """
-    The get_time function has the function of calculating time from the angles of the clock hands
+    The get_time function computes the time by utilizing the angles of the clock hands.
     """
     hour = hour_angle / 30
 
@@ -309,7 +318,7 @@ def get_time(hour_angle, minute_angle, second_angle):
 
 def draw_time(img, time):
     """
-    The draw_time function has the function of drawing time on a clock image
+    Drawing time on a clock image is the purpose of the draw_time function.
     """
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 2
@@ -326,7 +335,7 @@ def draw_time(img, time):
     cv2.putText(img, second, (210, 950), font, font_scale, (0, 0, 255), font_thickness)
 
 
-def solve(img):
+def resolve(img):
     img = resize_input(img=img)
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     img_hsv = cv2.bitwise_not(img_hsv)
@@ -337,20 +346,25 @@ def solve(img):
     )
     blurred = cv2.GaussianBlur(thresh, (5, 5), 0)
 
+    # If the clock is not detected, return None
+    if clock_detection(img, blurred) is None:
+        return None
+
     center_x, center_y, radius = clock_detection(img, blurred)
 
-    lines = line_detection(img, blurred)
+    lines = line_detection(blurred)
 
-    groups = group_lines_detection(lines, center_x, center_y, radius)
+    groups = clock_hand_line(lines, center_x, center_y, radius)
 
     hands = hands_detection(groups, center_x, center_y)
 
+    # If there are not enough hands, return None
     if len(hands) < 3:
         return
 
-    hour_hand, minute_hand, second_hand = get_hands(hands)
+    hour_hand, minute_hand, second_hand = clock_hand_classification(hands)
 
-    draw_hands_frame(img, hour_hand, minute_hand, second_hand, center_x, center_y)
+    draw_hands(img, hour_hand, minute_hand, second_hand, center_x, center_y)
 
     hour_angle = get_angle(hand=hour_hand, center_x=center_x, center_y=center_y)
     minute_angle = get_angle(hand=minute_hand, center_x=center_x, center_y=center_y)
@@ -375,14 +389,14 @@ def main():
             print(f"Warning: Cannot open/read file: {filename}")
             continue
 
-        img_resolve = solve(img)
+        img_reresolve = resolve(img)
 
-        if img_resolve is not None:
-            img = img_resolve
+        if img_reresolve is not None:
+            img = img_reresolve
 
         img = cv2.resize(src=img, dsize=(400, 400))
 
-        if img_resolve is None:
+        if img_reresolve is None:
             img = cv2.putText(
                 img=img,
                 text="Cannot find enough hands.",
@@ -394,8 +408,6 @@ def main():
             )
 
         result_path = f"output/output_{i}.jpg"
-
-        print(f"Saving result to {result_path}")
 
         cv2.imwrite(filename=result_path, img=img)
         cv2.destroyAllWindows()
