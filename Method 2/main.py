@@ -187,138 +187,113 @@ def hands_detection(groups, center_x, center_y):
     return hands
 
 
-"""--------------------------------------------------------------------------------------------------------------------"""
-
-
-# The get_hands function has the function of accurately determining the hour, minute, and second hands
-# from the 3 clock hands found in the hands_detection function.
 def get_hands(hands):
-    # Arrange the clock hands by thickness
+    """
+    The get_hands function has the function of accurately determining the hour, minute, and second hands from the 3 clock hands found in the hands_detection function.
+    """
     sorted_hands_by_thickness = sorted(hands, key=lambda hands: hands[1])
 
-    # The second hand is the hand with the smallest thickness
     second_hand = sorted_hands_by_thickness[0]
 
-    # Remove the second hand from the list containing 3 clock hands
     hands.remove(second_hand)
 
-    # Arrange the remaining 2 clock hands by length
     sorted_hands_by_length = sorted(hands, key=lambda hands: hands[2])
 
-    # The hour hand is the hand with the shortest length and the remaining hand is the minute hand
     hour_hand = sorted_hands_by_length[0]
     minute_hand = sorted_hands_by_length[1]
 
     return hour_hand, minute_hand, second_hand
 
 
-# The draw_hands_frame function
 def draw_hands_frame(img, hour_hand, minute_hand, second_hand, center_x, center_y):
-    # Draw rectangle and add label for hour hand
-    x1, y1, x2, y2 = hour_hand[0]
+    """
+    The draw_hands_frame function
+    """
+    x1, y1, _, _ = hour_hand[0]
     cv2.line(img, (center_x, center_y), (x1, y1), (255, 0, 0), 15)
 
-    # Draw line and add label for minute hand
-    x1, y1, x2, y2 = minute_hand[0]
+    x1, y1, _, _ = minute_hand[0]
     cv2.line(img, (center_x, center_y), (x1, y1), (0, 255, 0), 10)
 
-    # Draw line and add label for second hand
-    x1, y1, x2, y2 = second_hand[0]
+    x1, y1, _, _ = second_hand[0]
     cv2.line(img, (center_x, center_y), (x1, y1), (0, 0, 255), 5)
 
 
-# Function to calculate direction vector of a clock hand
 def get_vector(hand):
+    """
+    Function to calculate direction vector of a clock hand
+    """
     x1, y1, x2, y2 = hand[0]
     vector = [x2 - x1, y2 - y1]
     return vector
 
 
-# Function to calculate the dot product of two vectors
 def dot_product(u, v):
+    """
+    Function to calculate the dot product of two vectors
+    """
     return u[0] * v[0] + u[1] * v[1]
 
 
-# The function calculates the directional product of two vectors
 def cross_product(u, v):
+    """
+    The function calculates the directional product of two vectors
+    """
     return u[0] * v[1] - u[1] * v[0]
 
 
-# Function to calculate the angle of a clock hand relative to the y direction
 def get_angle(hand, center_x, center_y):
-    # u is the direction vector of the clock hands
-    u = get_vector(hand)
+    """
+    Function to calculate the angle of a clock hand relative to the y direction
+    """
+    u = get_vector(hand=hand)
 
-    # Create a horizontal direction vector from the center of the clock
     v = [center_x - center_x, center_y - (center_y - 100)]
 
-    # Call the function to calculate the dot product of two vectors
-    dot_uv = dot_product(u, v)
+    dot_uv = dot_product(u=u, v=v)
 
-    # Calculate the length of vector u and v
     length_u = math.sqrt(u[0] ** 2 + u[1] ** 2)
     length_v = math.sqrt(v[0] ** 2 + v[1] ** 2)
 
-    # Calculate the cosine of the angle between two vectors using the formula u.v / (|u| * |v|)
     cos_theta = dot_uv / (length_u * length_v)
 
-    # Limit the value of cos to the range [-1, 1] to avoid errors when calculating arccos
     cos_theta = max(min(cos_theta, 1.0), -1.0)
 
-    # Calculate the angle using the formula arccos(cos_theta)
     theta = math.acos(cos_theta)
 
-    # Convert angle from radians to degrees
     theta_degrees = math.degrees(theta)
 
-    # If the directional product is greater than 0, that means vector u is to the left of vector v
-    # Conversely, if the directional product is less than or equal to 0, that means vector u is to the right or in the same direction as vector v
     cross_uv = cross_product(u, v)
     if cross_uv > 0:
-        # Returns the complementary angle of theta
         return 360 - theta_degrees
     else:
         return theta_degrees
 
 
-# The get_time function has the function of calculating time from the angles of the clock hands
 def get_time(hour_angle, minute_angle, second_angle):
-    # Calculate the time from the angle of the hour hand by dividing by 30 (each hour corresponds to 30 degrees)
+    """
+    The get_time function has the function of calculating time from the angles of the clock hands
+    """
     hour = hour_angle / 30
 
-    # Calculate minutes and seconds from the angle of the minute and second hands by dividing by 6 (each minute or second corresponds to 6 degrees)
     minute = minute_angle / 6
     second = second_angle / 6
 
-    # Adjust to avoid errors
-
-    # If the angle of the hour hand is close to an integer multiplied with 30 (i.e. close to a specific hour)
-    # and the angle of the minute hand is close to 0 or 360 (i.e. close to 12 o'clock)
     if (round(hour) * 30 - hour_angle <= 6) and (
         (355 < minute_angle and minute_angle < 360) or (minute_angle < 90)
     ):
-        # Round hour up or down
         hour = round(hour)
         if hour == 12:
             hour = 0
 
-    # If the angle of the hour hand is close to a specific hour
-    # and the angle of the minute hand is close to 360 (ie close to 12 o'clock)
-    # Then set minute to 0
     if (hour_angle - hour * 30 <= 6) and (355 < minute_angle and minute_angle < 360):
         minute = 0
 
-    # If the angle of the minute hand is close to an integer multiplied with 6 (i.e. close to a specific minute)
-    # and the angle of the second hand is approximately between 0 and 6 (i.e. 1 round of 60 seconds has passed).
     if (round(minute) * 6 - minute_angle <= 6) and (second_angle < 6):
-        # Round minutes up or down
         minute = round(minute)
         if minute == 60:
             minute = 0
 
-    # If the angle of the minute hand is close to a specific minute
-    # and the angle of the second hand is close to 360 (ie close to 12 o'clock)
-    # Then set second to 0
     if (minute_angle - minute * 30 <= 6) and (
         354 < second_angle and second_angle < 360
     ):
@@ -328,21 +303,20 @@ def get_time(hour_angle, minute_angle, second_angle):
     minute = int(minute)
     second = int(second)
 
-    # Create a time series in hh:mm:ss format
     time = f"{hour:02d}:{minute:02d}:{second:02d}"
     return time
 
 
-# The draw_time function has the function of drawing time on a clock image
 def draw_time(img, time):
-    # Choose the font, size and thickness of the text
+    """
+    The draw_time function has the function of drawing time on a clock image
+    """
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 2
     font_thickness = 3
 
     hour, minute, second = map(str, time.split(":"))
 
-    # Write text on the image with selected parameters
     cv2.putText(img, hour, (10, 950), font, font_scale, (255, 0, 0), font_thickness)
     cv2.putText(img, ":", (90, 950), font, font_scale, (0, 0, 0), font_thickness)
 
@@ -353,68 +327,52 @@ def draw_time(img, time):
 
 
 def solve(img):
-    # Step 1: image preprocessing includes resizing the image and increasing contrast
-    # and reducing noise to increase the likelihood of detecting the clock
-    img = resize_input(img)
-    # Process images before searching for clock
-    img_hsv = cv2.cvtColor(
-        img, cv2.COLOR_BGR2HSV
-    )  # Convert image from BGR color space to HSV
-    img_hsv = cv2.bitwise_not(img_hsv)  # Invert color values in HSV space
-    # Create a CLAHE object to balance the brightness of the image
+    img = resize_input(img=img)
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    img_hsv = cv2.bitwise_not(img_hsv)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    # Apply CLAHE to the V (brightness) channel of the HSV image
     img_hsv[:, :, 2] = clahe.apply(img_hsv[:, :, 2])
-    # Generate a binary threshold for channel V of the HSV image using the Otsu method
     _, thresh = cv2.threshold(
         img_hsv[:, :, 2], 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
-    # Blur the image with a Gaussian filter to reduce noise
     blurred = cv2.GaussianBlur(thresh, (5, 5), 0)
 
-    # Step 2: detect the clock
     center_x, center_y, radius = clock_detection(img, blurred)
 
-    # Step 3: detect line segments in the clock
     lines = line_detection(img, blurred)
 
-    # Step 4: finding lines that are close together and nearly parallel to group into a group
     groups = group_lines_detection(lines, center_x, center_y, radius)
 
-    # Step 5: detect the clock hands
     hands = hands_detection(groups, center_x, center_y)
 
     if len(hands) < 3:
         return
 
-    # Step 6: Determine which hand is the hour hand, which hand is the minute hand, and which hand is the second hand
     hour_hand, minute_hand, second_hand = get_hands(hands)
 
-    # Step 7: draw a frame around and label the clock hands back on the image
     draw_hands_frame(img, hour_hand, minute_hand, second_hand, center_x, center_y)
 
-    # Step 8: determine the rotation angle of the clock hands
-    hour_angle = get_angle(hour_hand, center_x, center_y)
-    minute_angle = get_angle(minute_hand, center_x, center_y)
-    second_angle = get_angle(second_hand, center_x, center_y)
+    hour_angle = get_angle(hand=hour_hand, center_x=center_x, center_y=center_y)
+    minute_angle = get_angle(hand=minute_hand, center_x=center_x, center_y=center_y)
+    second_angle = get_angle(hand=second_hand, center_x=center_x, center_y=center_y)
 
-    # Step 9: calculate the clock time based on the rotation angle in step 8
-    time = get_time(hour_angle, minute_angle, second_angle)
+    time = get_time(
+        hour_angle=hour_angle, minute_angle=minute_angle, second_angle=second_angle
+    )
 
-    # Step 10: draw time on the image
-    draw_time(img, time)
+    draw_time(img=img, time=time)
 
     return img
 
 
 def main():
-    # Iterate over images in the input directory
     for i in range(1, 31):
         filename = f"input/{i}.jpg"
 
-        img = cv2.imread(filename)
+        img = cv2.imread(filename=filename)
 
         if img is None:
+            print(f"Warning: Cannot open/read file: {filename}")
             continue
 
         img_resolve = solve(img)
@@ -422,22 +380,24 @@ def main():
         if img_resolve is not None:
             img = img_resolve
 
-        img = cv2.resize(img, (400, 400))
+        img = cv2.resize(src=img, dsize=(400, 400))
 
         if img_resolve is None:
             img = cv2.putText(
-                img,
-                "Can not find enough hands.",
-                (0, 40),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 0, 255),
-                2,
+                img=img,
+                text="Cannot find enough hands.",
+                org=(0, 40),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontScale=0.8,
+                color=(0, 0, 255),
+                thickness=2,
             )
 
         result_path = f"output/output_{i}.jpg"
 
-        cv2.imwrite(result_path, img)
+        print(f"Saving result to {result_path}")
+
+        cv2.imwrite(filename=result_path, img=img)
         cv2.destroyAllWindows()
 
 
