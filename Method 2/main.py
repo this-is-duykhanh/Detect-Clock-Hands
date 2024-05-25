@@ -56,7 +56,7 @@ def clock_detection(img, blurred):
         max_rect = None
 
         for contour in contours:
-            area = cv2.contourArea(contour)
+            area = cv2.contourArea(contour=contour)
 
             if area < max_area:
                 continue
@@ -67,7 +67,7 @@ def clock_detection(img, blurred):
         if max_rect is None:
             return None
 
-        x, y, w, h = cv2.boundingRect(max_rect)
+        x, y, w, h = cv2.boundingRect(array=max_rect)
 
         center_x = x + w // 2
         center_y = y + h // 2
@@ -389,7 +389,7 @@ def main():
             print(f"Warning: Cannot open/read file: {filename}")
             continue
 
-        img_reresolve = resolve(img)
+        img_reresolve = resolve(img=img)
 
         if img_reresolve is not None:
             img = img_reresolve
@@ -410,7 +410,6 @@ def main():
         result_path = f"output/output_{i}.jpg"
 
         cv2.imwrite(filename=result_path, img=img)
-        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
