@@ -380,7 +380,7 @@ def resolve(img):
 
 
 def main():
-    for i in range(1, 31):
+    for i in range(1, 27):
         filename = f"input/{i}.jpg"
 
         img = cv2.imread(filename=filename)
